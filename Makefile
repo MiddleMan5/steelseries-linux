@@ -9,11 +9,11 @@ UDEV_RULES_DIR=$(DESTDIR)etc/udev/rules.d
 
 INSTALL_FILES=$(patsubst %,$(UDEV_RULES_DIR)/%,$(UDEV_RULES))
 
-$(info $(INSTALL_FILES))
+SUDO=sudo
 
 $(UDEV_RULES_DIR)/%: $(RESOURCE_DIR)/%
-	mkdir -p "$(dir $@)"
-	cp -f "$<" "$@"
+	${SUDO} mkdir -p "$(dir $@)"
+	${SUDO} cp -f "$<" "$@"
 
 install: $(INSTALL_FILES)
 	bash "$(RESOURCE_DIR)/preinstall-check.sh"
