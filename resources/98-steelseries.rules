@@ -1,0 +1,1 @@
+ACTION=="add", SUBSYSTEM=="hidraw", ATTRS{idVendor}=="1038" RUN+="/etc/udev/rules.d/98-steelseries-init.py '%E{DEVNAME}'"
