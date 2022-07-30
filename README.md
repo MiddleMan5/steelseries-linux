@@ -1,8 +1,4 @@
----
-layout: post
-title: Running SteelSeries Engine on Linux - The Official Unofficial Guide
-author: "Michael Lelli"
----
+# Unofficial SteelSeries Keyboard Support
 
 Original post and code written by Michael Lelli here: https://gist.github.com/ToadKing/26c28809b8174ad0e06bfba309cf3ff3
 
