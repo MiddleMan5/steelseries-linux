@@ -8,7 +8,7 @@ error() {
     echo "Error: " $@ >&2
 }
 
-REQUIRED_COMMANDS="python3 wine make bash fc-list"
+REQUIRED_COMMANDS="python3 wine make bash fc-list curl"
 MISSING_COMMANDS=()
 for cmd in $REQUIRED_COMMANDS; do
     if [ -z "$(command -v "$cmd")" ]; then
