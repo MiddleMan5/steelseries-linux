@@ -1,4 +1,3 @@
-
 DESTDIR=/
 
 RESOURCE_DIR=$(CURDIR)/resources
@@ -24,12 +23,28 @@ $(ENGINE_EXE):
 	curl "${ENGINE_DOWNLOAD_URI}" -L --output "$(ENGINE_EXE)"
 	chmod +x "$(ENGINE_EXE)"
 
+check:
+	bash "$(RESOURCE_DIR)/preinstall-check.sh"
+
 download: $(ENGINE_EXE)
 
-install: $(INSTALL_FILES) $(ENGINE_EXE)
-	bash "$(RESOURCE_DIR)/preinstall-check.sh"
+# Apply the new rules without requiring a reboot or replug
+udev-reload: $(INSTALL_FILES)
+	${SUDO} udevadm control --reload-rules
+	${SUDO} udevadm trigger --subsystem-match=hidraw --action=add
+
+install: check $(INSTALL_FILES) udev-reload $(ENGINE_EXE)
 	echo "Configuring wine"
 	bash "$(WINE_INIT)"
 	wine "$(ENGINE_EXE)"
+
+uninstall:
+	${SUDO} rm -f $(INSTALL_FILES)
+	${SUDO} udevadm control --reload-rules
+
+clean:
+	rm -rf "$(WORKDIR)"
+
+.PHONY: check download udev-reload install uninstall clean
 
 .DEFAULT_GOAL = install
