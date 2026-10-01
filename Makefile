@@ -45,6 +45,9 @@ uninstall:
 clean:
 	rm -rf "$(WORKDIR)"
 
-.PHONY: check download udev-reload install uninstall clean
+test:
+	python3 -m unittest discover -s tests -v
+
+.PHONY: check download udev-reload install uninstall clean test
 
 .DEFAULT_GOAL = install

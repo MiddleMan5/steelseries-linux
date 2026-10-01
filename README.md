@@ -10,12 +10,42 @@ Note that is is all unofficial and not supported by SteelSeries. After this post
 
 ## Prerequisites
 
-* **Wine** - Version 7.0 or newer is recommended. SteelSeries GG requires Windows 10, and older Wine versions have HID bugs that break some devices ([example](https://bugs.winehq.org/show_bug.cgi?id=47013)).
+* **Wine** - Use **11.9 or newer** for current SteelSeries GG. Older Wine versions can crash during GG's .NET certificate generation with `0x80092023` ([Wine bug 59746, fixed in 11.9](https://github.com/wine-mirror/wine/blob/wine-11.9/ANNOUNCE.md)). Setting the emulated Windows version to Windows 10 does not fix this Wine bug.
 * **udev** - Unless you're using an obscure/old distro you probably already have this.
 * **Python 3** - Used by the udev rule to grant device permissions.
 * **gnu make** - Install setup scripts and udev rules
 * **winetricks** *(optional but recommended)* - Used as a fallback to install the Arial fonts GG needs for its login screen and OLED apps.
+* **winbind** *(optional)* - Provides `ntlm_auth` for Wine's NTLM authentication support. A missing helper is separate from the certificate crash above.
 * Your favorite distro of **Linux**.
+
+### Upgrading Wine on Ubuntu 24.04
+
+Ubuntu 24.04's Wine package is 9.0. Use the [WineHQ Ubuntu repository](https://gitlab.winehq.org/wine/wine/-/wikis/Debian-Ubuntu) to get a newer version. As of October 2026, WineHQ stable is 11.0, which predates the GG certificate fix; use `winehq-devel` (11.9 or newer).
+
+Close Wine applications before upgrading. These repository commands are specifically for Ubuntu 24.04 (`noble`):
+
+```bash
+sudo dpkg --add-architecture i386
+sudo mkdir -p /etc/apt/keyrings
+sudo curl -fsSL https://dl.winehq.org/wine-builds/winehq.key \
+  -o /etc/apt/keyrings/winehq-archive.key
+sudo curl -fsSL https://dl.winehq.org/wine-builds/ubuntu/dists/noble/winehq-noble.sources \
+  -o /etc/apt/sources.list.d/winehq-noble.sources
+sudo apt update
+sudo apt install --install-recommends winehq-devel winbind
+wine --version
+```
+
+If GG is already installed, reapply setup and launch it without reinstalling:
+
+```bash
+bash resources/wine-init.sh
+wine 'C:\Program Files\SteelSeries\GG\SteelSeriesGGEZ.exe' \
+  '-dataPath=C:\ProgramData\SteelSeries\GG' -dbEnv=production
+```
+
+Use the same `WINEPREFIX` as the original install if it is not `~/.wine`.
+Current GG uses `SteelSeriesGGEZ.exe` as its launcher. If an old desktop shortcut still invokes `wine-stable`, use the command above to launch with the upgraded `wine` command.
 
 
 ## Setup (automatic)
@@ -26,10 +56,12 @@ This will:
 
 1. Install the udev rules from `resources/` into `/etc/udev/rules.d/` (uses sudo) and reload udev so no reboot is needed
 2. Download the latest SteelSeries GG installer into `.temp/`
-3. Configure your Wine prefix (`resources/wine-init.sh`): initialize it, set the Windows version to Windows 10, enable full plug-and-play support, and install/register the Arial fonts GG needs
+3. Configure your Wine prefix (`resources/wine-init.sh`): initialize it, set the Windows version to Windows 10, enable full plug-and-play support, apply GG's database compatibility workaround, and install/register the Arial fonts GG needs
 4. Run the GG installer under Wine
 
 To use a Wine prefix other than `~/.wine`, set `WINEPREFIX` before running make.
+
+Wine setup initializes the prefix without launching its startup applications or waiting for every Wine application to exit. Required setup failures stop the install. The optional Winetricks font fallback has a five-minute limit; if it fails or times out, setup warns and continues with the available fonts.
 
 The installer is only downloaded once; run `make clean` first if you want to force re-downloading the latest version.
 
@@ -80,11 +112,27 @@ Run `bash resources/wine-init.sh`, or do the equivalent by hand:
         wine reg add 'HKLM\Software\Microsoft\Windows NT\CurrentVersion\Fonts' /v 'Arial Bold (TrueType)' /t REG_SZ /d arialbd.ttf /f
         wine reg add 'HKLM\Software\Microsoft\Windows NT\CurrentVersion\Fonts' /v 'Arial Black (TrueType)' /t REG_SZ /d ariblk.ttf /f
 
+4. **Current GG database compatibility** - Let GG's SQLite library fall back from Wine's incomplete WinRT storage API. This override applies only to the GG launcher:
+
+        wine reg add 'HKCU\Software\Wine\AppDefaults\SteelSeriesGGEZ.exe\DllOverrides' /v windows.storage.applicationdata /t REG_SZ /d '' /f
+
 ### Installing SteelSeries GG
 
 Installation works very similarly to Windows: Simply run the installer exe and follow the steps. Note that during installation the driver installation process might crash or hang due to missing functionality in Wine. To work around this, simply kill the `win_driver_installer.exe` process if it hangs. The installer will continue along after it's killed.
 
 ## Troubleshooting
+
+**GG crashes immediately with `SteelSeriesGGEZ.exe`, `X500DistinguishedNameEncode`, or `0x80092023`** - GG uses `cn=SteelSeries A/S` for a self-signed certificate. Wine versions before 11.9 incorrectly look up the certificate's common-name field case-sensitively. Upgrade to Wine 11.9 or newer ([upstream fix](https://github.com/wine-mirror/wine/blob/wine-11.9/ANNOUNCE.md)); see the Ubuntu instructions above. Installing Mono, fonts, or changing GPU flags does not resolve this specific exception. GG ships its own .NET runtime.
+
+**GG crashes in `Microsoft.Data.Sqlite.SqliteConnection` / `ApplicationData.get_LocalFolder` after upgrading Wine** - Wine 11.18 exposes an incomplete WinRT storage API. GG's bundled SQLite library probes it and crashes. Run `bash resources/wine-init.sh` again: setup disables `windows.storage.applicationdata` specifically for `SteelSeriesGGEZ.exe`, letting SQLite use its normal desktop fallback. This does not replace GG's DLLs or change other applications' DLL overrides.
+
+**`ntlm_auth was not found` / `no NTLM support`** - Wine cannot find Samba's helper for Windows NTLM authentication. On Ubuntu, install it with `sudo apt install winbind` and check `ntlm_auth --version`. This can affect authentication that uses NTLM; it is not the cause of the `X500DistinguishedNameEncode` certificate exception.
+
+**Install stops at "Initializing wine prefix" / "configuration ... has been updated"** - Earlier versions of the setup script used `wineserver -w`, which waits for all applications in the prefix to exit. SteelSeries Engine, PrismSync, or another background application can keep it waiting indefinitely. Cancel the stuck `make install` with Ctrl+C and re-run it with the updated script. Setup now uses `wineboot --init` and no longer waits for the whole Wine session to finish.
+
+**`WDFLDR.SYS` missing / `ssdevfactory` fails to load** - An existing GG installation may try to load its Windows kernel driver when Wine starts. That driver depends on functionality unavailable in Wine ([Wine bug 49193](https://bugs.winehq.org/show_bug.cgi?id=49193)); this project uses Linux hidraw access for the supported device features instead. Removing the setup hang does not add Windows driver support, and these diagnostics may still appear. Messages such as `query_service ... 1060` or `ensure_mta ... 0x800401f0` alone do not establish whether setup failed; check whether it reaches "Wine configuration complete" and starts the installer.
+
+**Winetricks font setup times out** - Close applications running in the selected Wine prefix, then run `winetricks -q corefonts` with the same `WINEPREFIX`, or install your distro's Microsoft core fonts package and retry `make install`.
 
 **"Windows 10 or up is required for SteelSeries GG."** - Your Wine prefix is set to an older Windows version. Run `wine winecfg /v win10` (or set it in `winecfg` under the Applications tab) and try again. `make install` now does this automatically.
 
